@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Yıldız Oyunu</title>
+  <style>
+    /* Sayfa stili ve tuval görünümü ayarlanıyor */
+    body, html {
+      margin: 0; padding: 0; overflow: hidden; background: black;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+      background-color: black;
+    }
+    /* Menü ve ekranlar için stil */
+    #menu, #gameOverScreen, #levelCompleteScreen {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+    button {
+      font-size: 24px;
+      padding: 10px 20px;
+      margin: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Başlangıç menüsü -->
+<div id="menu">
+  <h1>Yıldız Oyunu</h1>
+    <p style="max-width: 400px; margin: auto; font-size: 18px;">
+    🕹️ <strong>Nasıl Oynanır?</strong><br />
+    Yıldızı <strong>Space</strong> tuşuna basarak zıplatın. <br />
+    Duvarlara çarpmadan geçin ve altın yıldızları toplayarak skor kazanın. <br />
+    100 puana ulaştığınızda seviyeyi tamamlarsınız!
+  </p>
+
+  <button id="level1Btn">Kolay Seviye</button>
+  <button id="level2Btn">Zor Seviye</button>
+</div>
+
+<!-- Oyun bittiğinde gösterilecek ekran -->
+<div id="gameOverScreen" style="display:none;">
+  <h2>Oyun Bitti</h2>
+  <p>Space tuşuna basarak yeniden başlayabilirsin</p>
+  <button id="backToMenuBtn">Ana Menüye Dön</button>
+</div>
+
+<!-- Seviye tamamlandığında gösterilecek ekran -->
+<div id="levelCompleteScreen" style="display:none;">
+  <h2 id="levelCompleteMessage">Tebrikler!</h2>
+  <button id="backToMenuFromLevelBtn">Ana Menüye Dön</button>
+</div>
+
+<!-- Oyun alanı (canvas) -->
+<canvas id="gameCanvas"></canvas>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // Ekran boyutuna göre canvas boyutlandırılıyor
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Görseller tanımlanıyor
+  const bgImage = new Image();
+  bgImage.src = "resimler/background.jpg";
+
+  const starImage = new Image();
+  starImage.src = "resimler/star.jpg";
+
+  const wallImage = new Image();
+  wallImage.src = "resimler/wall-texture.png"; // Duvar dokusu
+
+  // Sesler tanımlanıyor
+  const bgMusic = new Audio("sesler/background-music.mp3");
+  bgMusic.loop = true;
+
+  const jumpSound = new Audio("sesler/jump-sound.mp3");
+  const collectSound = new Audio("sesler/collect-sound.mp3");
+
+  // Oyun durumları
+  let gameStarted = false;
+  let gameOver = false;
+  let score = 0;
+  let level = 1;
+  let levelCompleted = false;
+
+  // Oyuncu yıldız nesnesi
+  let star = {
+    x: 100,
+    y: 300,
+    width: 50,
+    height: 50,
+    velocityY: 0,
+    gravity: 0.4,
+    jumpStrength: -8
+  };
+
+  // Engeller ve toplanabilir nesneler listesi
+  let obstacles = [];
+  let collectibles = [];
+
+  // Oyun mekaniği için aralıklar
+  let gapHeight = 250;
+  let dynamicGapHeight = gapHeight;
+  let obstacleWidth = 80;
+  let obstacleSpacing = 300;
+
+  // Toplanabilir yıldızlar oluşturuluyor
+  function createCollectible(x, y) {
+    return {
+      x,
+      y,
+      width: 30,
+      height: 30,
+      collected: false
+    };
+  }
+
+  // Engel oluşturuluyor (bazıları hareketli)
+  function createObstacle(x) {
+    const topHeight = Math.floor(Math.random() * (canvas.height - dynamicGapHeight - 100)) + 50;
+    const type = Math.random() < 0.3 ? "moving" : "static";
+    const collectibleY = topHeight + dynamicGapHeight / 2 - 15;
+
+    if (Math.random() < 0.5) {
+      collectibles.push(createCollectible(x + obstacleWidth / 2 - 15, collectibleY));
+    }
+
+    return {
+      x,
+      width: obstacleWidth,
+      topHeight,
+      baseTopHeight: topHeight,
+      type,
+      offset: 0,
+      offsetDirection: 1,
+      passed: false
+    };
+  }
+
+  // Oyun sıfırlanıyor
+  function resetGame() {
+    star.y = 300;
+    star.velocityY = 0;
+    score = 0;
+    gameOver = false;
+    levelCompleted = false;
+    gameStarted = true;
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("gameOverScreen").style.display = "none";
+    document.getElementById("levelCompleteScreen").style.display = "none";
+
+    // Zorluk seviyesine göre ayar
+    if (level === 1) {
+      gapHeight = 250;
+      obstacleSpacing = 300;
+    } else if (level === 2) {
+      gapHeight = 220;
+      obstacleSpacing = 290;
+    }
+
+    dynamicGapHeight = gapHeight;
+    obstacles = [];
+    collectibles = [];
+
+    for (let i = 0; i < 5; i++) {
+      obstacles.push(createObstacle(canvas.width + i * obstacleSpacing));
+    }
+
+    bgMusic.play();
+  }
+
+  // Space tuşu kontrolleri
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "Space") {
+      if (!gameStarted && gameOver) {
+        resetGame(); // Oyun bittiğinde Space ile yeniden başlat
+      } else if (gameStarted) {
+        star.velocityY = star.jumpStrength;
+        jumpSound.currentTime = 0;
+        jumpSound.play();
+      }
+    }
+  });
+
+  // Oyun güncellemesi
+  function update() {
+    if (levelCompleted) return;
+
+    // Yerçekimi ve zıplama
+    star.velocityY += star.gravity;
+    star.y += star.velocityY;
+
+    // Zorluk dinamik olarak artıyor
+    if (dynamicGapHeight > 160) {
+      dynamicGapHeight -= 0.01;
+    }
+
+    for (let obs of obstacles) {
+      obs.x -= 3; // Engel sağdan sola hareket ediyor
+
+      // Hareketli engel kontrolü
+      if (obs.type === "moving") {
+        obs.offset += obs.offsetDirection * 2;
+        if (obs.offset > 40 || obs.offset < -40) {
+          obs.offsetDirection *= -1;
+        }
+      }
+
+      const topY = obs.baseTopHeight + (obs.type === "moving" ? obs.offset : 0);
+      const bottomY = topY + dynamicGapHeight;
+
+      // Engel geçildi mi kontrolü (skor artırma)
+      if (!obs.passed && obs.x + obs.width < star.x + star.width / 2) {
+        score++;
+        obs.passed = true;
+      }
+
+      // Çarpışma kontrolü
+      if (
+        star.x < obs.x + obs.width &&
+        star.x + star.width > obs.x &&
+        (
+          star.y < topY ||
+          star.y + star.height > bottomY
+        )
+      ) {
+        gameStarted = false;
+        gameOver = true;
+        bgMusic.pause();
+        showGameOverScreen();
+      }
+    }
+
+    // Toplanabilir yıldız kontrolü
+    for (let col of collectibles) {
+      col.x -= 3;
+
+      if (
+        !col.collected &&
+        star.x < col.x + col.width &&
+        star.x + star.width > col.x &&
+        star.y < col.y + col.height &&
+        star.y + star.height > col.y
+      ) {
+        score += 5;
+        col.collected = true;
+        collectSound.currentTime = 0;
+        collectSound.play();
+      }
+    }
+
+    // Yeni engel oluştur
+    if (obstacles[0].x + obstacleWidth < 0) {
+      obstacles.shift();
+      obstacles.push(createObstacle(obstacles[obstacles.length - 1].x + obstacleSpacing));
+    }
+
+    // Yıldız ekran dışına çıkarsa
+    if (star.y > canvas.height - star.height || star.y < 0) {
+      gameStarted = false;
+      gameOver = true;
+      bgMusic.pause();
+      showGameOverScreen();
+    }
+
+    // Seviye tamamlama kontrolü
+    if (score >= 100) {
+      completeLevel();
+    }
+  }
+
+  // Engel çizimi (duvar dokulu)
+  function drawObstacle(obs) {
+    const topY = obs.baseTopHeight + (obs.type === "moving" ? obs.offset : 0);
+    const bottomY = topY + dynamicGapHeight;
+
+    if (wallImage.complete && wallImage.naturalHeight !== 0) {
+      ctx.drawImage(wallImage, obs.x, 0, obs.width, topY);
+      ctx.drawImage(wallImage, obs.x, bottomY, obs.width, canvas.height - bottomY);
+    } else {
+      ctx.fillStyle = obs.type === "moving" ? "#ff4444" : "#555";
+      ctx.fillRect(obs.x, 0, obs.width, topY);
+      ctx.fillRect(obs.x, bottomY, obs.width, canvas.height - bottomY);
+    }
+  }
+
+  // Tüm oyun öğeleri çiziliyor
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if(bgImage.complete) {
+      ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+    }
+
+    if(starImage.complete) {
+      ctx.drawImage(starImage, star.x, star.y, star.width, star.height);
+    }
+
+    for (let obs of obstacles) {
+      drawObstacle(obs);
+    }
+
+    for (let col of collectibles) {
+      if (!col.collected) {
+        ctx.fillStyle = "gold";
+        ctx.beginPath();
+        ctx.arc(col.x + col.width / 2, col.y + col.height / 2, col.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Skor gösterimi
+    ctx.fillStyle = "white";
+    ctx.font = "30px Arial";
+    ctx.fillText("Skor: " + score, 30, 50);
+  }
+
+  // Ana oyun döngüsü
+  function gameLoop() {
+    if (gameStarted) {
+      update();
+    }
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Oyun bittiğinde ekran gösterimi
+  function showGameOverScreen() {
+    document.getElementById("gameOverScreen").style.display = "block";
+  }
+
+  // Seviye başarıyla tamamlandığında ekran gösterimi
+  function completeLevel() {
+    gameStarted = false;
+    levelCompleted = true;
+    bgMusic.pause();
+    const msg = document.getElementById("levelCompleteMessage");
+    msg.textContent = level === 1
+      ? "🎉 Tebrikler! Kolay Seviyeyi tamamladınız!"
+      : "🏆 Tebrikler! Zor Seviyeyi tamamladınız!";
+    document.getElementById("levelCompleteScreen").style.display = "block";
+  }
+
+  // Menüdeki butonlar
+  document.getElementById("level1Btn").addEventListener("click", () => {
+    level = 1;
+    resetGame();
+  });
+
+  document.getElementById("level2Btn").addEventListener("click", () => {
+    level = 2;
+    resetGame();
+  });
+
+  document.getElementById("backToMenuBtn").addEventListener("click", () => {
+    gameStarted = false;
+    gameOver = false;
+    document.getElementById("menu").style.display = "block";
+    document.getElementById("gameOverScreen").style.display = "none";
+    score = 0;
+    bgMusic.pause();
+  });
+
+  document.getElementById("backToMenuFromLevelBtn").addEventListener("click", () => {
+    gameStarted = false;
+    levelCompleted = false;
+    document.getElementById("menu").style.display = "block";
+    document.getElementById("levelCompleteScreen").style.display = "none";
+    score = 0;
+    bgMusic.pause();
+  });
+
+  // Arka plan yüklendikten sonra oyun başlatılıyor
+  bgImage.onload = () => {
+    gameLoop();
+  };
+</script>
+</body>
+</html>
