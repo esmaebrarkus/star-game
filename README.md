@@ -11,7 +11,7 @@ Star Game, HTML5 Canvas ve JavaScript kullanılarak geliştirilmiş, Flappy Bird
 - 📱 **Basit kontroller**: Sadece boşluk tuşu ile oynanır  
 - 🔄 **Oynanış**: 100 puana kadar sürekli akan skor yapısı  
 
-## 🔗 Canlı Demo
+## 🔗 Oynamak İçin
 
 Oyunu doğrudan tarayıcınızda oynamak için:  
 👉 [https://esmaebrarkus.github.io/star-game/](https://esmaebrarkus.github.io/star-game/)
@@ -24,10 +24,10 @@ Oyunun tanıtımını YouTube üzerinden izleyebilirsiniz:
 ## 🖼️ Oyun Görselleri
 
 ### Başlangıç Ekranı  
-![Başlangıç Ekranı](./gorsel1.jpg)
+![Başlangıç Ekranı](resimler/gorsel1.jpg)
 
 ### Oyun Anı  
-![Oyun Görüntüsü](./gorsel2.jpg)
+![Oyun Görüntüsü](resimler/gorsel2.jpg)
 
 ## 🛠️ Kurulum ve Çalıştırma
 
